@@ -15,19 +15,7 @@ proc getOrFetch(state: var AppState, cfg: Config, sentence: string): Annotation 
 proc exportSession(doc: Document, outPath: string) =
   if doc.cache.len == 0:
     return
-  var parts: seq[string]
-  for line in doc.lines:
-    if doc.cache.hasKey(line):
-      let ann = doc.cache[line]
-      var entry: seq[string]
-      entry.add(line)
-      entry.add("【翻译】" & ann.translation)
-      for l in ann.vocabulary.splitLines():
-        entry.add("【词汇】" & l)
-      for l in ann.grammar.splitLines():
-        entry.add("【文法】" & l)
-      parts.add(entry.join("\n"))
-  writeFile(outPath, parts.join("\n\n") & "\n")
+  saveDocumentJson(doc, outPath)
 
 proc safeTermSize(): tuple[w, h: int] =
   (max(40, terminalWidth()), max(10, terminalHeight()))
@@ -43,10 +31,15 @@ proc main() =
     quit(1)
 
   let cfg = loadConfig()
-  var state = AppState(
-    doc: loadDocument(path),
-    overlay: Overlay(visible: false)
-  )
+  let isSession = path.splitFile().ext.toLowerAscii() == ".manabu"
+  var state = AppState(overlay: Overlay(visible: false))
+  try:
+    state.doc =
+      if isSession: loadDocumentJson(path)
+      else: loadDocument(path)
+  except IOError as e:
+    stderr.writeLine("错误：" & e.msg)
+    quit(1)
   if state.doc.lines.len == 0:
     stderr.writeLine("错误：文件中没有有效行")
     quit(1)
@@ -77,7 +70,7 @@ proc main() =
     stdout.flushFile()
     try: illwillDeinit() except IllwillError: discard
     showCursor()
-    exportSession(state.doc, path & ".manabu")
+    exportSession(state.doc, path.changeFileExt("manabu"))
 
   var dirty = true
   var lastW = 0
