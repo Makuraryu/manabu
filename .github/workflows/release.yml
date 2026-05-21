@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: macos-latest
+    permissions:
+      contents: write   # needed to create the GitHub Release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Nim
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: stable
+
+      - name: Build release binary
+        run: nimble build -d:release --accept
+
+      # Rename binary to include platform tag so multiple platforms can coexist
+      - name: Stage binary
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          ARCH=$(uname -m)   # arm64 or x86_64
+          cp manabu "manabu-${TAG}-macos-${ARCH}"
+          echo "BINARY=manabu-${TAG}-macos-${ARCH}" >> "$GITHUB_ENV"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$TAG" "$BINARY" \
+            --title "$TAG" \
+            --generate-notes
+
+      # Compute SHA256 of the source tarball that Homebrew will download
+      - name: Compute tarball SHA256
+        run: |
+          URL="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
+          SHA=$(curl -sL "$URL" | shasum -a 256 | awk '{print $1}')
+          echo "TARBALL_URL=${URL}" >> "$GITHUB_ENV"
+          echo "TARBALL_SHA=${SHA}" >> "$GITHUB_ENV"
+
+      # Clone tap, update formula, push back
+      - name: Update Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          git clone \
+            "https://x-access-token:${TAP_TOKEN}@github.com/Makuraryu/homebrew-tap.git" \
+            /tmp/tap
+
+          FORMULA_URL="$TARBALL_URL" FORMULA_SHA="$TARBALL_SHA" \
+          python3 - /tmp/tap/Formula/manabu.rb << 'PYEOF'
+import re, os, sys
+path = sys.argv[1]
+url  = os.environ["FORMULA_URL"]
+sha  = os.environ["FORMULA_SHA"]
+content = open(path).read()
+content = re.sub(r'url "[^"]+"',           f'url "{url}"', content, count=1)
+content = re.sub(r'sha256 "[0-9a-f]+"',   f'sha256 "{sha}"', content)
+open(path, "w").write(content)
+PYEOF
+
+          cd /tmp/tap
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name  "github-actions[bot]"
+          git add Formula/manabu.rb
+          git diff --cached --quiet \
+            || git commit -m "manabu ${TAG}" \
+            && git push
