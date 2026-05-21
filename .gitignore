@@ -1,0 +1,24 @@
+# Nim build artifacts
+nimcache/
+*.exe
+
+# Compiled binary
+/manabu
+
+# Nimble packages cache
+.nimble/
+nimble.lock
+
+# Export / session files
+*.manabu
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
