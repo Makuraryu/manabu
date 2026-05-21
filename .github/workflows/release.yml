@@ -58,15 +58,15 @@ jobs:
 
           FORMULA_URL="$TARBALL_URL" FORMULA_SHA="$TARBALL_SHA" \
           python3 - /tmp/tap/Formula/manabu.rb << 'PYEOF'
-import re, os, sys
-path = sys.argv[1]
-url  = os.environ["FORMULA_URL"]
-sha  = os.environ["FORMULA_SHA"]
-content = open(path).read()
-content = re.sub(r'url "[^"]+"',           f'url "{url}"', content, count=1)
-content = re.sub(r'sha256 "[0-9a-f]+"',   f'sha256 "{sha}"', content)
-open(path, "w").write(content)
-PYEOF
+          import re, os, sys
+          path = sys.argv[1]
+          url  = os.environ["FORMULA_URL"]
+          sha  = os.environ["FORMULA_SHA"]
+          content = open(path).read()
+          content = re.sub(r'url "[^"]+"',           f'url "{url}"', content, count=1)
+          content = re.sub(r'sha256 "[0-9a-f]+"',   f'sha256 "{sha}"', content)
+          open(path, "w").write(content)
+          PYEOF
 
           cd /tmp/tap
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
