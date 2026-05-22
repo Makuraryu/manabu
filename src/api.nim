@@ -67,7 +67,7 @@ proc requestAnnotation*(cfg: Config, sentence: string): Annotation =
     "model": cfg.model,
     "messages": messages,
     "temperature": 0.3,
-    "max_tokens": 1024
+    "max_tokens": 4096
   }
 
   var client = newHttpClient(timeout = 30_000)
