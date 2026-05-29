@@ -111,8 +111,11 @@ proc render*(state: AppState, w, h: int) =
 
   # --- Status bar (last row) ---
   buf &= at(h - 1, 0)
-  let statusRaw = " ↑↓ 移动   Enter 分析   q 退出     " &
-                  $(state.doc.cursor + 1) & "/" & $state.doc.lines.len
+  let hints = " ↑↓ 移动   Enter 分析   r 重跑   c 复制   q 退出"
+  let rightSide =
+    if state.statusMsg != "": "  " & state.statusMsg & "  "
+    else: "  " & $(state.doc.cursor + 1) & "/" & $state.doc.lines.len
+  let statusRaw = hints & rightSide
   buf &= "\e[47m\e[30m" & pad(truncateByWidth(statusRaw, w), w) & "\e[0m"
 
   # --- Overlay ---

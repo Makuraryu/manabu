@@ -22,6 +22,7 @@ type
   AppState* = object
     doc*: Document
     overlay*: Overlay
+    statusMsg*: string
 
 proc loadDocument*(path: string): Document =
   let raw = readFile(path)

@@ -1,4 +1,4 @@
-import std/[os, strutils, tables]
+import std/[os, osproc, streams, strutils, tables]
 import illwill
 import types
 import api
@@ -11,6 +11,13 @@ proc getOrFetch(state: var AppState, cfg: Config, sentence: string): Annotation 
   let ann = requestAnnotation(cfg, sentence)
   state.doc.cache[sentence] = ann
   ann
+
+proc copyToClipboard(text: string) =
+  let p = startProcess("pbcopy", options = {poUsePath})
+  p.inputStream.write(text)
+  close(p.inputStream)
+  discard p.waitForExit()
+  p.close()
 
 proc exportSession(doc: Document, outPath: string) =
   if doc.cache.len == 0:
@@ -91,6 +98,7 @@ proc main() =
       continue
 
     dirty = true
+    state.statusMsg = ""
     case key
     of Key.Q:
       break
@@ -146,6 +154,17 @@ proc main() =
           let ann = getOrFetch(state, cfg, s)
           state.overlay = Overlay(visible: true, loading: false,
                                    title: s, body: ann)
+    of Key.R:
+      let s = currentSentence(state.doc)
+      state.doc.cache.del(s)
+      state.overlay = Overlay(visible: true, loading: true, title: s)
+      let (tw2, th2) = safeTermSize()
+      render(state, tw2, th2)
+      let ann = getOrFetch(state, cfg, s)
+      state.overlay = Overlay(visible: true, loading: false, title: s, body: ann)
+    of Key.C:
+      copyToClipboard(currentSentence(state.doc))
+      state.statusMsg = "已复制"
     else:
       if state.overlay.visible:
         state.overlay = Overlay(visible: false)
