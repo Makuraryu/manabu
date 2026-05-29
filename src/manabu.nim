@@ -38,12 +38,18 @@ proc main() =
     quit(1)
 
   let cfg = loadConfig()
-  let isSession = path.splitFile().ext.toLowerAscii() == ".manabu"
+  let sessionSibling = path.changeFileExt("manabu")
+  let actualPath =
+    if path.splitFile().ext.toLowerAscii() != ".manabu" and fileExists(sessionSibling):
+      sessionSibling
+    else:
+      path
+  let isSession = actualPath.splitFile().ext.toLowerAscii() == ".manabu"
   var state = AppState(overlay: Overlay(visible: false))
   try:
     state.doc =
-      if isSession: loadDocumentJson(path)
-      else: loadDocument(path)
+      if isSession: loadDocumentJson(actualPath)
+      else: loadDocument(actualPath)
   except IOError as e:
     stderr.writeLine("错误：" & e.msg)
     quit(1)
