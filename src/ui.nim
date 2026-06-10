@@ -37,6 +37,23 @@ proc pad*(s: string, targetW: int): string =
   if dw >= targetW: return s
   s & spaces(targetW - dw)
 
+proc clipByCols*(s: string, fromCol, toCol: int): string =
+  ## Slice `s` down to the cells covering display columns [fromCol, toCol).
+  ## A double-width rune straddling either boundary is replaced by spaces for
+  ## the columns that fall inside the region, so callers never emit half of a
+  ## wide glyph at the region's edge.
+  var col = 0; var i = 0
+  while i < s.len and col < toCol:
+    let size = runeLenAt(s, i)
+    let rw = displayWidth($runeAt(s, i))
+    if col >= fromCol and col + rw <= toCol:
+      result.add(s[i ..< i + size])
+    elif col + rw > fromCol:
+      for _ in max(col, fromCol) ..< min(col + rw, toCol):
+        result.add(' ')
+    col += rw
+    i += size
+
 proc wrapByWidth*(s: string, maxW: int): seq[string] =
   for line in s.splitLines():
     if line.strip() == "": result.add(""); continue
@@ -100,14 +117,64 @@ proc render*(state: AppState, w, h: int) =
         dec fillRow
     dec lineIdx
 
-  for r in 0 ..< h - 1:
-    buf &= at(r, 0)
-    if rows[r].selected:
-      buf &= "\e[31;1m" & pad(rows[r].text, w) & "\e[0m"
-    elif rows[r].text == "":
-      buf &= "\e[0m" & spaces(w)
+  # --- Overlay geometry, computed before list rows are emitted ---
+  # List rows underneath the overlay must not draw a double-width glyph
+  # straddling the overlay's edge: the overlay would overwrite one half and
+  # the terminal blanks the orphaned half-cell, leaving stray cells beside
+  # the borders. So rows covered by the overlay are clipped around it.
+  const loadingMsg = "  解析中，请稍候…  "
+  var ovTop, ovBottom = -1        # inclusive row range covered by the overlay
+  var ovLeft, ovRight = 0         # column range [ovLeft, ovRight)
+  var ovX, ovY, ovW, ovH, innerW, textW = 0
+  var titleLines, content: seq[string]
+  if state.overlay.visible:
+    if state.overlay.loading:
+      ovTop = h div 2
+      ovBottom = ovTop
+      ovLeft = max(0, (w - displayWidth(loadingMsg)) div 2)
+      ovRight = min(w, ovLeft + displayWidth(loadingMsg))
     else:
-      buf &= "\e[37m" & pad(rows[r].text, w) & "\e[0m"
+      ovW = min(w - 4, 80)
+      if ovW >= 20:
+        ovX = max(0, (w - ovW) div 2)
+        innerW = ovW - 2          # usable width between borders
+        textW = innerW - 8        # width for indented text (8-space indent)
+
+        # Wrap title across multiple lines
+        titleLines = wrapByWidth(state.overlay.title, innerW - 2)
+
+        # Build content lines; indent wrapping uses textW so indent+text <= innerW
+        content.add("【翻译】")
+        for l in wrapByWidth(state.overlay.body.translation, textW):
+          content.add(indent & l)
+        content.add("")
+        content.add("【词汇】")
+        for l in wrapByWidth(state.overlay.body.vocabulary, textW):
+          content.add(indent & l)
+        content.add("")
+        content.add("【文法】")
+        for l in wrapByWidth(state.overlay.body.grammar, textW):
+          content.add(indent & l)
+
+        # Layout: top(1) + titleLines + sep(1) + content + bottom(1)
+        ovH = min(titleLines.len + 3 + content.len, h - 2)
+        ovY = max(0, (h - ovH) div 2)
+        ovTop = ovY
+        ovBottom = ovY + ovH - 1
+        ovLeft = ovX
+        ovRight = ovX + ovW
+
+  for r in 0 ..< h - 1:
+    let style =
+      if rows[r].selected: "\e[31;1m"
+      elif rows[r].text == "": "\e[0m"
+      else: "\e[37m"
+    let line = pad(rows[r].text, w)
+    if r >= ovTop and r <= ovBottom:
+      buf &= at(r, 0) & style & clipByCols(line, 0, ovLeft) &
+             at(r, ovRight) & clipByCols(line, ovRight, w) & "\e[0m"
+    else:
+      buf &= at(r, 0) & style & line & "\e[0m"
 
   # --- Status bar (last row) ---
   buf &= at(h - 1, 0)
@@ -121,38 +188,9 @@ proc render*(state: AppState, w, h: int) =
   # --- Overlay ---
   if state.overlay.visible:
     if state.overlay.loading:
-      let msg = "  解析中，请稍候…  "
-      let row = h div 2
-      let col = max(0, (w - displayWidth(msg)) div 2)
-      buf &= at(row, col) & "\e[40m\e[33;1m" & msg & "\e[0m"
+      buf &= at(h div 2, ovLeft) & "\e[40m\e[33;1m" & loadingMsg & "\e[0m"
     else:
-      let ovW = min(w - 4, 80)
       if ovW >= 20:
-        let ovX = max(0, (w - ovW) div 2)
-        let body = state.overlay.body
-        let innerW = ovW - 2          # usable width between borders
-        let textW = innerW - 8        # width for indented text (8-space indent)
-
-        # Wrap title across multiple lines
-        let titleLines = wrapByWidth(state.overlay.title, innerW - 2)
-
-        # Build content lines; indent wrapping uses textW so indent+text <= innerW
-        var content: seq[string]
-        content.add("【翻译】")
-        for l in wrapByWidth(body.translation, textW):
-          content.add(indent & l)
-        content.add("")
-        content.add("【词汇】")
-        for l in wrapByWidth(body.vocabulary, textW):
-          content.add(indent & l)
-        content.add("")
-        content.add("【文法】")
-        for l in wrapByWidth(body.grammar, textW):
-          content.add(indent & l)
-
-        # Layout: top(1) + titleLines + sep(1) + content + bottom(1)
-        let ovH = min(titleLines.len + 3 + content.len, h - 2)
-        let ovY = max(0, (h - ovH) div 2)
         let sepRow = ovY + 1 + titleLines.len
         let maxRows = ovH - titleLines.len - 3
 
