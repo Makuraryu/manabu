@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v1.0.1); created on the dispatched ref if it does not exist'
+        required: true
 
 jobs:
   release:
@@ -13,6 +18,26 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG=${{ inputs.tag }}" >> "$GITHUB_ENV"
+          else
+            echo "TAG=${GITHUB_REF#refs/tags/}" >> "$GITHUB_ENV"
+          fi
+
+      # Tag pushes made with GITHUB_TOKEN don't retrigger this workflow,
+      # so a dispatched run creates the tag and continues with the release.
+      - name: Create tag (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name  "github-actions[bot]"
+          if ! git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
 
       - name: Set up Nim
         uses: jiro4989/setup-nim-action@v2
@@ -25,11 +50,9 @@ jobs:
       # Rename binary to include platform tag so multiple platforms can coexist
       - name: Stage binary
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
           ARCH=$(uname -m)   # arm64 or x86_64
           cp manabu "manabu-${TAG}-macos-${ARCH}"
           echo "BINARY=manabu-${TAG}-macos-${ARCH}" >> "$GITHUB_ENV"
-          echo "TAG=${TAG}" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
         env:
