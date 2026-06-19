@@ -1,4 +1,4 @@
-import std/[os, osproc, streams, strutils, tables]
+import std/[os, osproc, streams, strutils, tables, times]
 import illwill
 import types
 import api
@@ -19,10 +19,28 @@ proc copyToClipboard(text: string) =
   discard p.waitForExit()
   p.close()
 
-proc exportSession(doc: Document, outPath: string) =
-  if doc.cache.len == 0:
+proc exportSession(doc: Document, outPath: string, force = false) =
+  if doc.cache.len == 0 and not force:
     return
   saveDocumentJson(doc, outPath)
+
+proc composeViaEditor(): string =
+  ## Open $VISUAL/$EDITOR (fallback vi) on a temp file and return the typed text.
+  ## A non-zero editor exit (e.g. vim :cq) is treated as a cancel => "".
+  let ts = now().format("yyyyMMdd-HHmmss")
+  let tmp = getTempDir() / ("manabu-" & ts & ".txt")
+  writeFile(tmp, "")
+  var editor = getEnv("VISUAL")
+  if editor.len == 0: editor = getEnv("EDITOR")
+  if editor.len == 0: editor = "vi"
+  let parts = parseCmdLine(editor)          # handles e.g. "code --wait"
+  let exe = parts[0]
+  let args = parts[1 .. ^1] & tmp
+  let p = startProcess(exe, args = args, options = {poUsePath, poParentStreams})
+  let code = p.waitForExit()
+  p.close()
+  result = if code == 0: readFile(tmp) else: ""
+  removeFile(tmp)
 
 proc safeTermSize(): tuple[w, h: int] =
   (max(40, terminalWidth()), max(10, terminalHeight()))
@@ -34,26 +52,39 @@ proc main() =
   for p in params:
     if p == "--parse": parseMode = true
     else: positional.add(p)
-  if positional.len == 0:
-    stderr.writeLine("用法：manabu [--parse] <文件路径>")
-    quit(1)
-  let path = positional[0]
-  if not fileExists(path):
-    stderr.writeLine("错误：文件不存在：" & path)
-    quit(1)
+  # No file argument → compose mode: type text in $EDITOR, always sentence-split,
+  # and save to a timestamped .manabu in the current directory.
+  let composeMode = positional.len == 0
+  var path: string
+  var composeText: string
+  if composeMode:
+    path = getCurrentDir() / (now().format("yyyyMMdd-HHmmss") & ".manabu")
+    composeText = composeViaEditor()
+    if composeText.strip().len == 0:
+      stderr.writeLine("未输入任何内容，已取消")
+      quit(0)
+  else:
+    path = positional[0]
+    if not fileExists(path):
+      stderr.writeLine("错误：文件不存在：" & path)
+      quit(1)
 
   let cfg = loadConfig()
-  let sessionSibling = path.changeFileExt("manabu")
-  let actualPath =
-    if path.splitFile().ext.toLowerAscii() != ".manabu" and fileExists(sessionSibling):
-      sessionSibling
-    else:
-      path
-  let isSession = actualPath.splitFile().ext.toLowerAscii() == ".manabu"
+  var actualPath = path
+  var isSession = false
+  if not composeMode:
+    let sessionSibling = path.changeFileExt("manabu")
+    actualPath =
+      if path.splitFile().ext.toLowerAscii() != ".manabu" and fileExists(sessionSibling):
+        sessionSibling
+      else:
+        path
+    isSession = actualPath.splitFile().ext.toLowerAscii() == ".manabu"
   var state = AppState(overlay: Overlay(visible: false))
   try:
     state.doc =
-      if parseMode: loadDocumentParsed(path)
+      if composeMode: documentFromText(composeText, path, parse = true)
+      elif parseMode: loadDocumentParsed(path)
       elif isSession: loadDocumentJson(actualPath)
       else: loadDocument(actualPath)
   except IOError as e:
@@ -89,7 +120,10 @@ proc main() =
     stdout.flushFile()
     try: illwillDeinit() except IllwillError: discard
     showCursor()
-    exportSession(state.doc, path.changeFileExt("manabu"))
+    let outPath = path.changeFileExt("manabu")
+    exportSession(state.doc, outPath, force = composeMode)
+    if composeMode and fileExists(outPath):
+      stdout.writeLine("已保存到 " & outPath)
 
   var dirty = true
   var lastW = 0

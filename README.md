@@ -32,7 +32,13 @@ Get a key at <https://platform.deepseek.com>.
 ```sh
 manabu your-text.txt
 manabu --parse your-text.txt   # split into sentences on 。！？
+manabu                         # no file: type text in $EDITOR
 ```
+
+Running `manabu` with no file opens your `$EDITOR` (`$VISUAL`/`$EDITOR`, falling
+back to `vi`). Type or paste text, then save and quit: the text is split into
+sentences on `。！？`, enters the normal flow, and is saved to a timestamped
+`./<timestamp>.manabu` in the current directory.
 
 By default each non-empty line is one navigable entry. With `--parse`, manabu
 reads the whole file as one stream (ignoring line breaks) and splits it into

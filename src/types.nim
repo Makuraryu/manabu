@@ -25,16 +25,6 @@ type
     overlay*: Overlay
     statusMsg*: string
 
-proc loadDocument*(path: string): Document =
-  let raw = readFile(path)
-  var lines: seq[string]
-  for line in raw.splitLines():
-    let s = line.strip()
-    if s.len > 0:
-      lines.add(s)
-  Document(sourcePath: path, lines: lines, cursor: 0,
-           cache: initTable[string, Annotation]())
-
 proc splitJapaneseSentences*(raw: string): seq[string] =
   ## Whole-stream split on Japanese sentence terminators. Newlines/CR are
   ## dropped (hard-wrapped sentences are rejoined); the terminator stays
@@ -52,10 +42,25 @@ proc splitJapaneseSentences*(raw: string): seq[string] =
   let tail = ($buf).strip()   # trailing text with no final terminator
   if tail.len > 0: result.add(tail)
 
-proc loadDocumentParsed*(path: string): Document =
-  let raw = readFile(path)
-  Document(sourcePath: path, lines: splitJapaneseSentences(raw), cursor: 0,
+proc documentFromText*(raw: string, path: string, parse: bool): Document =
+  ## Build a Document from in-memory text. `parse` selects sentence splitting
+  ## (splitJapaneseSentences) vs the default one-non-blank-line-per-entry.
+  var lines: seq[string]
+  if parse:
+    lines = splitJapaneseSentences(raw)
+  else:
+    for line in raw.splitLines():
+      let s = line.strip()
+      if s.len > 0:
+        lines.add(s)
+  Document(sourcePath: path, lines: lines, cursor: 0,
            cache: initTable[string, Annotation]())
+
+proc loadDocument*(path: string): Document =
+  documentFromText(readFile(path), path, parse = false)
+
+proc loadDocumentParsed*(path: string): Document =
+  documentFromText(readFile(path), path, parse = true)
 
 proc moveCursor*(d: var Document, delta: int) =
   d.cursor = max(0, min(d.lines.len - 1, d.cursor + delta))
