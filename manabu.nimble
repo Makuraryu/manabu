@@ -1,5 +1,5 @@
 # Package
-version       = "1.0.1"
+version       = "1.1.0"
 author        = "makuraryu"
 description   = "Japanese sentence-level reading helper (DeepSeek-backed)"
 license       = "MIT"
