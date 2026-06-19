@@ -29,10 +29,15 @@ proc safeTermSize(): tuple[w, h: int] =
 
 proc main() =
   let params = commandLineParams()
-  if params.len == 0:
-    stderr.writeLine("用法：manabu <文件路径>")
+  var parseMode = false
+  var positional: seq[string]
+  for p in params:
+    if p == "--parse": parseMode = true
+    else: positional.add(p)
+  if positional.len == 0:
+    stderr.writeLine("用法：manabu [--parse] <文件路径>")
     quit(1)
-  let path = params[0]
+  let path = positional[0]
   if not fileExists(path):
     stderr.writeLine("错误：文件不存在：" & path)
     quit(1)
@@ -48,7 +53,8 @@ proc main() =
   var state = AppState(overlay: Overlay(visible: false))
   try:
     state.doc =
-      if isSession: loadDocumentJson(actualPath)
+      if parseMode: loadDocumentParsed(path)
+      elif isSession: loadDocumentJson(actualPath)
       else: loadDocument(actualPath)
   except IOError as e:
     stderr.writeLine("错误：" & e.msg)

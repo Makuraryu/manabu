@@ -31,7 +31,13 @@ Get a key at <https://platform.deepseek.com>.
 
 ```sh
 manabu your-text.txt
+manabu --parse your-text.txt   # split into sentences on 。！？
 ```
+
+By default each non-empty line is one navigable entry. With `--parse`, manabu
+reads the whole file as one stream (ignoring line breaks) and splits it into
+sentences on Japanese terminators `。`, `！`, `？` — useful for prose that packs
+several sentences on a line or wraps one sentence across many.
 
 | Key | Action |
 |-----|--------|

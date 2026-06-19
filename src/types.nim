@@ -1,4 +1,5 @@
 import std/[tables, strutils, json]
+from std/unicode import Rune, runes, `$`, `==`
 
 type
   Annotation* = object
@@ -32,6 +33,28 @@ proc loadDocument*(path: string): Document =
     if s.len > 0:
       lines.add(s)
   Document(sourcePath: path, lines: lines, cursor: 0,
+           cache: initTable[string, Annotation]())
+
+proc splitJapaneseSentences*(raw: string): seq[string] =
+  ## Whole-stream split on Japanese sentence terminators. Newlines/CR are
+  ## dropped (hard-wrapped sentences are rejoined); the terminator stays
+  ## attached to the sentence it closes; empty fragments are skipped.
+  const terminators = [Rune(0x3002), Rune(0xFF01), Rune(0xFF1F)]  # 。！？
+  var buf = newSeq[Rune]()
+  for r in raw.runes:
+    if r == Rune('\n'.ord) or r == Rune('\r'.ord):
+      continue
+    buf.add(r)
+    if r in terminators:
+      let s = ($buf).strip()
+      if s.len > 0: result.add(s)
+      buf.setLen(0)
+  let tail = ($buf).strip()   # trailing text with no final terminator
+  if tail.len > 0: result.add(tail)
+
+proc loadDocumentParsed*(path: string): Document =
+  let raw = readFile(path)
+  Document(sourcePath: path, lines: splitJapaneseSentences(raw), cursor: 0,
            cache: initTable[string, Annotation]())
 
 proc moveCursor*(d: var Document, delta: int) =
