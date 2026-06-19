@@ -1,4 +1,5 @@
 import std/[tables, strutils, json]
+from std/unicode import Rune, runes, `$`, `==`
 
 type
   Annotation* = object
@@ -24,15 +25,42 @@ type
     overlay*: Overlay
     statusMsg*: string
 
-proc loadDocument*(path: string): Document =
-  let raw = readFile(path)
+proc splitJapaneseSentences*(raw: string): seq[string] =
+  ## Whole-stream split on Japanese sentence terminators. Newlines/CR are
+  ## dropped (hard-wrapped sentences are rejoined); the terminator stays
+  ## attached to the sentence it closes; empty fragments are skipped.
+  const terminators = [Rune(0x3002), Rune(0xFF01), Rune(0xFF1F)]  # 。！？
+  var buf = newSeq[Rune]()
+  for r in raw.runes:
+    if r == Rune('\n'.ord) or r == Rune('\r'.ord):
+      continue
+    buf.add(r)
+    if r in terminators:
+      let s = ($buf).strip()
+      if s.len > 0: result.add(s)
+      buf.setLen(0)
+  let tail = ($buf).strip()   # trailing text with no final terminator
+  if tail.len > 0: result.add(tail)
+
+proc documentFromText*(raw: string, path: string, parse: bool): Document =
+  ## Build a Document from in-memory text. `parse` selects sentence splitting
+  ## (splitJapaneseSentences) vs the default one-non-blank-line-per-entry.
   var lines: seq[string]
-  for line in raw.splitLines():
-    let s = line.strip()
-    if s.len > 0:
-      lines.add(s)
+  if parse:
+    lines = splitJapaneseSentences(raw)
+  else:
+    for line in raw.splitLines():
+      let s = line.strip()
+      if s.len > 0:
+        lines.add(s)
   Document(sourcePath: path, lines: lines, cursor: 0,
            cache: initTable[string, Annotation]())
+
+proc loadDocument*(path: string): Document =
+  documentFromText(readFile(path), path, parse = false)
+
+proc loadDocumentParsed*(path: string): Document =
+  documentFromText(readFile(path), path, parse = true)
 
 proc moveCursor*(d: var Document, delta: int) =
   d.cursor = max(0, min(d.lines.len - 1, d.cursor + delta))
