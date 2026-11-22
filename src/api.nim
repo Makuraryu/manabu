@@ -70,7 +70,7 @@ proc requestAnnotation*(cfg: Config, sentence: string): Annotation =
     "max_tokens": 4096
   }
 
-  var client = newHttpClient(timeout = 30_000)
+  var client = newHttpClient(timeout = 180_000)  # slow models (e.g. via a proxy, non-streaming) can take >30s
   client.headers = newHttpHeaders({
     "Content-Type": "application/json",
     "Authorization": "Bearer " & cfg.apiKey
