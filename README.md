@@ -23,6 +23,8 @@ Create `~/.config/manabu/config.toml`:
 api_key = "sk-your-deepseek-key"
 # model   = "deepseek-chat"   # optional override
 # base_url = "https://api.deepseek.com"
+# max_tokens = 8192           # optional, output budget per sentence
+# reasoning_effort = "none"    # optional; "" to omit, or "low"/"high" for thinking models
 ```
 
 Get a key at <https://platform.deepseek.com>.

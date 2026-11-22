@@ -16,6 +16,8 @@ type
     apiKey*: string
     model*: string
     baseUrl*: string
+    maxTokens*: int
+    reasoningEffort*: string   ## "" = don't send the field
 
 proc loadConfig*(): Config =
   let cfgPath = getHomeDir() / ".config" / "manabu" / "config.toml"
@@ -34,7 +36,10 @@ proc loadConfig*(): Config =
   Config(
     apiKey: apiKey,
     model: if t.hasKey("model"): t["model"].getStr() else: "deepseek-chat",
-    baseUrl: if t.hasKey("base_url"): t["base_url"].getStr() else: "https://api.deepseek.com"
+    baseUrl: if t.hasKey("base_url"): t["base_url"].getStr() else: "https://api.deepseek.com",
+    maxTokens: if t.hasKey("max_tokens"): t["max_tokens"].getInt() else: 8192,
+    # Thinking only burns output budget and latency for this task; off by default.
+    reasoningEffort: if t.hasKey("reasoning_effort"): t["reasoning_effort"].getStr().strip() else: "none"
   )
 
 proc parseResponse*(raw: string): Annotation =
@@ -63,12 +68,14 @@ proc requestAnnotation*(cfg: Config, sentence: string): Annotation =
     {"role": "system", "content": systemPrompt},
     {"role": "user",   "content": sentence}
   ]
-  let body = %* {
+  var body = %* {
     "model": cfg.model,
     "messages": messages,
     "temperature": 0.3,
-    "max_tokens": 4096
+    "max_tokens": cfg.maxTokens
   }
+  if cfg.reasoningEffort != "":
+    body["reasoning_effort"] = %(cfg.reasoningEffort)
 
   var client = newHttpClient(timeout = 180_000)  # slow models (e.g. via a proxy, non-streaming) can take >30s
   client.headers = newHttpHeaders({
@@ -76,8 +83,12 @@ proc requestAnnotation*(cfg: Config, sentence: string): Annotation =
     "Authorization": "Bearer " & cfg.apiKey
   })
   try:
-    let resp = client.post(cfg.baseUrl & "/chat/completions", body = $body)
-    if resp.status != "200 OK":
+    var resp = client.post(cfg.baseUrl & "/chat/completions", body = $body)
+    # Some backends reject reasoning_effort; retry once without it.
+    if resp.code == Http400 and body.hasKey("reasoning_effort"):
+      body.delete("reasoning_effort")
+      resp = client.post(cfg.baseUrl & "/chat/completions", body = $body)
+    if resp.code != Http200:
       return Annotation(
         translation: "API 错误：" & resp.status,
         vocabulary: resp.body[0 .. min(200, resp.body.len-1)],
