@@ -16,6 +16,12 @@ Runtime requires `~/.config/manabu/config.toml` with an `api_key` field (DeepSee
 
 `config.nims` globally enables `-d:ssl` so `httpclient` can talk HTTPS — keep it if you add new build entry points.
 
+## User preferences
+
+- **发布节奏**：功能修复/小改动完成后，直接 bump 版本、提交、打 tag、推送触发 release，不必每次额外确认。
+- **全局解析体验**：按 `a` 全局解析时，使用屏幕居中的 overlay 弹窗提示“正在解析全部”（与单句解析同款弹窗样式）；全部解析完成后直接关闭弹窗，不显示“全部解析完成/已全部解析”状态文案。
+- **版本号**：当前为 `1.2.1`（发布后保持 `manabu.nimble`、tag、README/Homebrew 一致）。
+
 ## Architecture
 
 Single-binary TUI. Five source files under `src/`, no sub-packages:
@@ -23,7 +29,7 @@ Single-binary TUI. Five source files under `src/`, no sub-packages:
 - `manabu.nim` — entry point and event loop. Owns the alternate-screen lifecycle (see below), the dirty-flag render gate, and key dispatch.
 - `types.nim` — `Document`, `Annotation`, `Overlay`, `AppState`. `loadDocument` strips blank lines so `cursor` always indexes a non-empty line.
 - `api.nim` — `loadConfig` (TOML), `requestAnnotation` (synchronous HTTPS POST to `/chat/completions`), `parseResponse` (splits the model output on `###TRANSLATION###` / `###VOCABULARY###` / `###GRAMMAR###` markers). The system prompt enforces that exact three-section format — changing the prompt and the parser must stay in lockstep.
-- `ui.nim` — renders one frame as a single ANSI-encoded string written atomically to stdout. Does **not** use illwill's `TerminalBuffer`. CJK-aware width math (`displayWidth`, `truncateByWidth`, `pad`, `wrapByWidth`) treats full-width glyphs as 2 columns; every layout calculation flows through these helpers.
+- `ui.nim` — renders one frame as a single ANSI-encoded string written atomically to stdout. Does **not** use illwill's `TerminalBuffer`. CJK-aware width math (`displayWidth`, `truncateByWidth`, `pad`, `wrapByWidth`) treats full-width glyphs as 2 columns; every layout calculation flows through these helpers. Overlay supports `loadingText` for custom centered loading messages (used by global parse-all).
 - `input.nim` — custom non-blocking stdin reader. illwill is kept only for raw-mode init, cursor show/hide, and the `Key` enum; key parsing and SGR mouse-scroll parsing (`\e[<…M/m`) are reimplemented because illwill's POSIX `parseStdin` discards mouse sequences. `gScrollDir` is a module-level global set as a side effect of returning `Key.Mouse` — `manabu.nim` reads it immediately after dispatch.
 
 ### Terminal lifecycle (don't break this)

@@ -52,8 +52,11 @@ several sentences on a line or wraps one sentence across many.
 | `↑` / `↓` / `j` / `k` | Move between sentences |
 | Two-finger scroll | Move between sentences / scroll analysis |
 | `Enter` | Analyse selected sentence |
+| `a` | Analyse all sentences (shows progress overlay) |
 | `↑` / `↓` (in analysis) | Scroll long analysis |
 | `Esc` / `Enter` / any key | Close analysis |
+| `r` | Re-run analysis for current sentence |
+| `c` | Copy current sentence to clipboard |
 | `q` | Quit (saves `.manabu` export) |
 
 ## Build from source
