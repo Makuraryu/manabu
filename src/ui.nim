@@ -122,17 +122,24 @@ proc render*(state: AppState, w, h: int) =
   # straddling the overlay's edge: the overlay would overwrite one half and
   # the terminal blanks the orphaned half-cell, leaving stray cells beside
   # the borders. So rows covered by the overlay are clipped around it.
-  const loadingMsg = "  解析中，请稍候…  "
+  let loadingMsg =
+    if state.overlay.loadingText.len > 0: "  " & state.overlay.loadingText & "  "
+    else: "  解析中，请稍候…  "
   var ovTop, ovBottom = -1        # inclusive row range covered by the overlay
   var ovLeft, ovRight = 0         # column range [ovLeft, ovRight)
   var ovX, ovY, ovW, ovH, innerW, textW = 0
   var titleLines, content: seq[string]
+  let simpleMsg =
+    if state.overlay.loading: loadingMsg
+    elif state.overlay.title.len == 0 and state.overlay.loadingText.len > 0:
+      "  " & state.overlay.loadingText & "  "
+    else: ""
   if state.overlay.visible:
-    if state.overlay.loading:
+    if simpleMsg.len > 0:
       ovTop = h div 2
       ovBottom = ovTop
-      ovLeft = max(0, (w - displayWidth(loadingMsg)) div 2)
-      ovRight = min(w, ovLeft + displayWidth(loadingMsg))
+      ovLeft = max(0, (w - displayWidth(simpleMsg)) div 2)
+      ovRight = min(w, ovLeft + displayWidth(simpleMsg))
     else:
       ovW = min(w - 4, 80)
       if ovW >= 20:
@@ -187,8 +194,11 @@ proc render*(state: AppState, w, h: int) =
 
   # --- Overlay ---
   if state.overlay.visible:
-    if state.overlay.loading:
-      buf &= at(h div 2, ovLeft) & "\e[40m\e[33;1m" & loadingMsg & "\e[0m"
+    if state.overlay.loading or (state.overlay.title.len == 0 and state.overlay.loadingText.len > 0):
+      let msg = if state.overlay.loading: loadingMsg else: "  " & state.overlay.loadingText & "  "
+      let msgW = displayWidth(msg)
+      let mx = max(0, (w - msgW) div 2)
+      buf &= at(h div 2, mx) & "\e[40m\e[33;1m" & msg & "\e[0m"
     else:
       if ovW >= 20:
         let sepRow = ovY + 1 + titleLines.len

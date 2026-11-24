@@ -19,6 +19,7 @@ type
     title*: string
     body*: Annotation
     scroll*: int
+    loadingText*: string
 
   AppState* = object
     doc*: Document
