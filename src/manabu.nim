@@ -211,6 +211,19 @@ proc main() =
     of Key.C:
       copyToClipboard(currentSentence(state.doc))
       state.statusMsg = "已复制"
+    of Key.A:
+      if state.overlay.visible:
+        state.overlay = Overlay(visible: false)
+      var parsed = 0
+      for i in 0 ..< state.doc.lines.len:
+        let s = state.doc.lines[i]
+        if not state.doc.cache.hasKey(s):
+          state.statusMsg = "正在解析全部"
+          let (tw2, th2) = safeTermSize()
+          render(state, tw2, th2)
+          discard getOrFetch(state, cfg, s)
+          inc parsed
+      state.statusMsg = if parsed > 0: "全部解析完成" else: "已全部解析"
     else:
       if state.overlay.visible:
         state.overlay = Overlay(visible: false)

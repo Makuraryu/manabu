@@ -178,7 +178,7 @@ proc render*(state: AppState, w, h: int) =
 
   # --- Status bar (last row) ---
   buf &= at(h - 1, 0)
-  let hints = " ↑↓ 移动   Enter 分析   r 重跑   c 复制   q 退出"
+  let hints = " ↑↓ 移动   Enter 分析   a 全部解析   r 重跑   c 复制   q 退出"
   let rightSide =
     if state.statusMsg != "": "  " & state.statusMsg & "  "
     else: "  " & $(state.doc.cursor + 1) & "/" & $state.doc.lines.len
